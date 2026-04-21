@@ -636,6 +636,7 @@ function Scanner({ scanResult, onScanComplete }) {
           const name = url.split("/").pop() || "remote-repo";
           generatedMockResult = createMockResult(name, lines);
         }
+        generatedMockResult.sourceUrl = url;
     } catch(e) {
         setScanning(false);
         return setErrorUrl("url is not valid please give the correct url");
@@ -1384,19 +1385,88 @@ function Nav({ user }) {
   );
 }
 
+// ─── MISSION LOGS (HISTORY) ───
+function MissionLogs({ logs }) {
+  if (!logs || logs.length === 0) return null;
+  return (
+    <section id="history" style={{ padding: "40px 24px", display: "flex", justifyContent: "center" }}>
+      <div className="glass-panel" style={{ width: "100%", maxWidth: 900, padding: "48px" }}>
+        <div className="section-label" style={{ marginBottom: 12 }}>ARCHIVE — PAST SCANS</div>
+        <h2 className="section-title" style={{ fontSize: 28, fontWeight: 700, marginBottom: 24 }}>Mission Logs</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "400px", overflowY: "auto", paddingRight: 8 }}>
+          {logs.map((log) => (
+            <div key={log.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 8 }}>
+              <div>
+                <div style={{ fontSize: 14, fontFamily: "Space Mono", color: "var(--cyan)", marginBottom: 4, wordBreak: "break-all" }}>{log.repo_url}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "Space Mono" }}>{new Date(log.timestamp + "Z").toLocaleString()}</div>
+              </div>
+              <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
+                <div style={{ textAlign: "center", minWidth: "60px" }}>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>FILES</div>
+                  <div className="orbitron" style={{ fontSize: 14 }}>{log.files_scanned}</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: "80px" }}>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>ANOMALIES</div>
+                  <div className="orbitron" style={{ fontSize: 14, color: log.anomalies_found > 5 ? "#FF2255" : "var(--text)" }}>{log.anomalies_found}</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: "50px" }}>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>GRADE</div>
+                  <div className="orbitron" style={{ fontSize: 24, fontWeight: 900, color: log.grade === 'A' ? 'var(--cyan)' : log.grade === 'B' ? 'var(--purple)' : log.grade === 'C' ? 'var(--orange)' : '#FF2255' }}>{log.grade}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── ROOT APP ───
 export default function LuminaCode() {
   const [scanResult, setScanResult] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [logs, setLogs] = useState([]);
+
+  const fetchLogs = useCallback(async (uid) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/scans/${uid}`);
+      const data = await res.json();
+      if (data.scans) setLogs(data.scans);
+    } catch (e) { console.error("Failed to fetch logs", e); }
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => {
       setUser(u);
       setAuthLoading(false);
+      if (u) fetchLogs(u.uid);
     });
     return unsub;
-  }, []);
+  }, [fetchLogs]);
+
+  const handleScanComplete = async (result) => {
+    setScanResult(result);
+    if (user && result) {
+      try {
+        await fetch("http://localhost:8000/api/scans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_uid: user.uid,
+            repo_url: result.sourceUrl || "local-repo",
+            grade: result.grade,
+            files_scanned: result.metrics.scannedFiles || 0,
+            anomalies_found: result.anomalies?.length || 0
+          })
+        });
+        fetchLogs(user.uid);
+      } catch (e) {
+        console.error("Failed to save scan", e);
+      }
+    }
+  };
 
   if (authLoading) return <div style={{ height: "100vh", background: "var(--void)" }} />;
 
@@ -1411,7 +1481,8 @@ export default function LuminaCode() {
 
       <main style={{ filter: !user ? "blur(15px)" : "none", opacity: !user ? 0.3 : 1, transition: "all 0.8s", pointerEvents: !user ? "none" : "all", height: !user ? "100vh" : "auto", overflow: !user ? "hidden" : "visible" }}>
         <Hero />
-        <Scanner scanResult={scanResult} onScanComplete={setScanResult} />
+        <Scanner scanResult={scanResult} onScanComplete={handleScanComplete} />
+        {user && logs.length > 0 && <MissionLogs logs={logs} />}
         <Metrics scanResult={scanResult} />
         <AnomalyMap scanResult={scanResult} />
         <Refactor scanResult={scanResult} />

@@ -1,15 +1,30 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Github, FolderUp, ScanLine, Code2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Github, FolderUp, ScanLine, Code2, AlertTriangle } from 'lucide-react';
 
 export default function RepoScanner() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState(0);
   const fileInputRef = useRef(null);
   const [fileName, setFileName] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [error, setError] = useState('');
 
   const startScan = (e) => {
     e.preventDefault();
+    setError('');
+
+    if (repoUrl) {
+      const githubRegex = /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/;
+      if (!githubRegex.test(repoUrl)) {
+        setError('Invalid GitHub repository URL. Format: https://github.com/user/repo');
+        return;
+      }
+    } else if (!fileName) {
+      setError('Please provide a valid GitHub URL or upload a code file to engage the scanner.');
+      return;
+    }
+
     setIsScanning(true);
     
     // Mock scan progress
@@ -25,7 +40,11 @@ export default function RepoScanner() {
       setTimeout(() => {
         setScanStep(index);
         if (index === steps.length - 1) {
-          setTimeout(() => setIsScanning(false), 2000);
+          setTimeout(() => {
+            setIsScanning(false);
+            setRepoUrl('');
+            setFileName('');
+          }, 2000);
         }
       }, index * 1000 + 500);
     });
@@ -76,8 +95,10 @@ export default function RepoScanner() {
             <input 
               type="text" 
               placeholder="Paste GitHub Repository URL..." 
-              className="gravity-input pl-12"
-              disabled={isScanning}
+              className={`gravity-input pl-12 ${error && repoUrl ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : ''}`}
+              disabled={isScanning || !!fileName}
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.files ? '' : e.target.value)}
             />
           </div>
           
@@ -87,19 +108,33 @@ export default function RepoScanner() {
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
-            onChange={(e) => setFileName(e.target.files[0]?.name || '')} 
+            onChange={(e) => {
+              setFileName(e.target.files[0]?.name || '');
+              if (e.target.files[0]) setRepoUrl('');
+            }} 
           />
           <button 
             type="button" 
-            disabled={isScanning} 
+            disabled={isScanning || !!repoUrl} 
             onClick={() => fileInputRef.current?.click()}
-            className="px-6 py-3 border border-white/10 hover:border-gz-purple hover:bg-gz-purple/10 rounded-xl flex items-center justify-center gap-2 text-white font-space transition-all cursor-pointer truncate max-w-[200px]"
+            className={`px-6 py-3 border border-white/10 hover:border-gz-purple ${!!repoUrl ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gz-purple/10 cursor-pointer'} rounded-xl flex items-center justify-center gap-2 text-white font-space transition-all truncate max-w-[200px]`}
             title={fileName || "Upload File"}
           >
             <FolderUp className="w-5 h-5 shrink-0" />
             <span className="truncate">{fileName || "Upload File"}</span>
           </button>
         </div>
+
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="relative z-10 text-red-400 text-sm font-space flex items-center gap-2 mt-2"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            {error}
+          </motion.div>
+        )}
 
         <div className="flex justify-end relative z-10 mt-6">
           <button type="submit" disabled={isScanning} className="plasma-btn cursor-pointer py-2 px-8 flex items-center gap-2">

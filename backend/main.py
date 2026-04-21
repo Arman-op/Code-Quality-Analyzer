@@ -4,8 +4,28 @@ from pydantic import BaseModel
 from typing import List, Optional
 import time
 import random
+import sqlite3
 
 app = FastAPI(title="LuminaCode Core API")
+
+def init_db():
+    conn = sqlite3.connect("scan_history.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_uid TEXT NOT NULL,
+            repo_url TEXT NOT NULL,
+            grade TEXT NOT NULL,
+            files_scanned INTEGER NOT NULL,
+            anomalies_found INTEGER NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # CORS Setup
 app.add_middleware(
@@ -54,6 +74,36 @@ def read_root():
 @app.get("/system-health")
 def get_system_health():
     return project_state
+
+class ScanRecord(BaseModel):
+    user_uid: str
+    repo_url: str
+    grade: str
+    files_scanned: int
+    anomalies_found: int
+
+@app.post("/api/scans")
+def save_scan(record: ScanRecord):
+    conn = sqlite3.connect("scan_history.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO scans (user_uid, repo_url, grade, files_scanned, anomalies_found)
+        VALUES (?, ?, ?, ?, ?)
+    """, (record.user_uid, record.repo_url, record.grade, record.files_scanned, record.anomalies_found))
+    conn.commit()
+    scan_id = cursor.lastrowid
+    conn.close()
+    return {"status": "success", "id": scan_id}
+
+@app.get("/api/scans/{user_uid}")
+def get_scans(user_uid: str):
+    conn = sqlite3.connect("scan_history.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scans WHERE user_uid = ? ORDER BY timestamp DESC", (user_uid,))
+    rows = cursor.fetchall()
+    conn.close()
+    return {"scans": [dict(row) for row in rows]}
 
 @app.post("/execute")
 def execute_code(request: CodeRequest):
