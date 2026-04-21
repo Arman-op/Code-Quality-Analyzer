@@ -1183,15 +1183,17 @@ function MissionDebrief({ scanResult }) {
 
   const exportPDF = async () => {
     setDownloading(true);
-    const element = document.getElementById("report");
+    const element = document.getElementById("report-content");
     if (element) {
       try {
         const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#000008" });
         const imgData = canvas.toDataURL("image/jpeg", 0.9);
-        const pdf = new jsPDF("p", "mm", "a4");
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
         pdf.save("LuminaCode_Mission_Log.pdf");
       } catch (err) {
         console.error("PDF generation failed", err);
@@ -1223,7 +1225,7 @@ function MissionDebrief({ scanResult }) {
   ];
   return (
     <section id="report" style={{ padding: "100px 24px" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <div id="report-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "40px", background: "var(--void)", borderRadius: "16px" }}>
         <div style={{ textAlign: "center", marginBottom: 64 }}>
           <div className="section-label" style={{ marginBottom: 12 }}>07 — MISSION DEBRIEF</div>
           <h2 className="section-title" style={{ fontSize: 36, fontWeight: 700 }}>Repository Health Report</h2>
